@@ -8,7 +8,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.ConnectableFlux;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
@@ -34,10 +33,10 @@ public class Launcher implements CommandLineRunner {
         long timeAtStart = System.currentTimeMillis();
         log.info("Launching [ ReactiveApp ]");
 
-        int size = 10;
+        int size = 10_000;
         char charToFind = 'O';
 
-        Scheduler scheduler = Schedulers.newBoundedElastic(5, 10, "TalanThread");
+        Scheduler scheduler = Schedulers.boundedElastic();
 
         List<String> personNameList = new ArrayList<>(size);
         List<Integer> personAgeList = new ArrayList<>(size);
@@ -51,46 +50,34 @@ public class Launcher implements CommandLineRunner {
         ConnectableFlux<Person> personFlux = Flux.zip(Flux.fromStream(nameStream), Flux.fromStream(ageStream),
                 (name,age) -> Person.builder().name(name).age(age).build())
                 .take(size)
-                .replay();
-
-        ConnectableFlux<Person> personFluxFromDatabase = personRepository.findAll().publish();
-
-        ConnectableFlux<Person> personToLog = Flux.from(personFlux).publish();
-        ConnectableFlux<Person> personToPushInCollection = Flux.from(personFlux).publish();
+                .publish();
 
         personFlux
-                //.log()
                 .subscribeOn(scheduler)
+                //.log()
                 .subscribe(p -> {
-                    Person person = recordPerson(p).block();
-                    log.info("[ {} ] saved", person);
+                    savedPersonList.add(recordPerson(p));
                 });
 
-        personFluxFromDatabase
-                //.log()
+        ConnectableFlux<Person> personFromDB = personRepository.findAll().publish();
+
+        personFromDB
                 .subscribeOn(scheduler)
+                //.log()
                 .subscribe(p -> {
-                    log.info("Getting objects from DB : {}", p);
+                    log.debug("Getting objects from DB : {}", p);
                     if (p.getName().contains(Character.toString(charToFind).toUpperCase())) {
-                        log.info("[ {} ] has an '{}' !!", p, charToFind);
+                        log.debug("[ {} ] has an '{}' !!", p, charToFind);
                     }
                     personNameList.add(p.getName());
                     personAgeList.add(p.getAge());
                 });
 
-        personToLog.log()
-                .subscribeOn(scheduler).subscribe(log::info);
-        personToPushInCollection.log()
-                .subscribeOn(scheduler).subscribe(savedPersonList::add);
-
-
         personFlux.connect();
-        personFluxFromDatabase.connect();
-        personToLog.connect();
-        personToPushInCollection.connect();
+        personFromDB.connect();
 
         while (!(personAgeList.size() == size && personNameList.size() == size)) {
-            log.info("Waiting...");
+            log.info("Waiting...({})", personAgeList.size());
             Thread.sleep(1000);
         }
 
@@ -106,9 +93,9 @@ public class Launcher implements CommandLineRunner {
 
     }
 
-    private Mono<Person> recordPerson(Person person) {
-        Mono<Person> savedPersonMono = personRepository.save(person);
-        log.info("Saving [ {} ]", person.getName());
+    private Person recordPerson(Person person) {
+        Person savedPersonMono = personRepository.save(person).block();
+        log.debug("Saving [ {} ]", person.getName());
         return savedPersonMono;
     }
 
