@@ -33,7 +33,7 @@ public class Launcher implements CommandLineRunner {
         long timeAtStart = System.currentTimeMillis();
         log.info("Launching [ ReactiveApp ]");
 
-        int size = 10_000;
+        int size = 2000;
         char charToFind = 'O';
 
         Scheduler scheduler = Schedulers.boundedElastic();
@@ -43,9 +43,17 @@ public class Launcher implements CommandLineRunner {
         List<Person> savedPersonList = new ArrayList<>(size);
 
         Stream<String> nameStream = Stream
-                .generate(personService::buildName);
+                .generate(() -> {
+                    try {
+                        return personService.buildName();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    return null;
+                });
         Stream<Integer> ageStream = Stream
                 .generate(personService::computeAge);
+
 
         ConnectableFlux<Person> personFlux = Flux.zip(Flux.fromStream(nameStream), Flux.fromStream(ageStream),
                 (name,age) -> Person.builder().name(name).age(age).build())
