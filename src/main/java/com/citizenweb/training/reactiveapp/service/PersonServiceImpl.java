@@ -10,8 +10,12 @@ import java.util.List;
 public class PersonServiceImpl implements PersonService {
 
     @Override
-    public String buildName() throws InterruptedException {
-        Thread.sleep(200);
+    public String buildName() {
+        try {
+            Thread.sleep(200);
+        } catch (InterruptedException ie) {
+            log.info("Name generation was interrupted");
+        }
         final String VOWEL = "V";
         final String CONSONANT = "C";
         StringBuilder stringBuilder = new StringBuilder();
