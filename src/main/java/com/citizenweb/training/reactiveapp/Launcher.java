@@ -34,7 +34,7 @@ public class Launcher implements CommandLineRunner {
         long timeAtStart = System.currentTimeMillis();
         log.info("Launching [ ReactiveApp ]");
 
-        int size = 10;
+        int size = 1000;
         char charToFind = 'O';
 
         Scheduler scheduler = Schedulers.newBoundedElastic(5, 10, "TalanThread");
@@ -53,13 +53,14 @@ public class Launcher implements CommandLineRunner {
                 .take(size)
                 .replay();
 
-        ConnectableFlux<Person> personFluxFromDatabase = personRepository.findAll().publish();
+        ConnectableFlux<Person> personFluxFromDatabase = personRepository.findAll()
+                .publish();
 
         ConnectableFlux<Person> personToLog = Flux.from(personFlux).publish();
         ConnectableFlux<Person> personToPushInCollection = Flux.from(personFlux).publish();
 
         personFlux
-                //.log()
+                .log()
                 .subscribeOn(scheduler)
                 .subscribe(p -> {
                     Person person = recordPerson(p).block();
@@ -67,7 +68,7 @@ public class Launcher implements CommandLineRunner {
                 });
 
         personFluxFromDatabase
-                //.log()
+                .log()
                 .subscribeOn(scheduler)
                 .subscribe(p -> {
                     log.info("Getting objects from DB : {}", p);
@@ -78,10 +79,8 @@ public class Launcher implements CommandLineRunner {
                     personAgeList.add(p.getAge());
                 });
 
-        personToLog.log()
-                .subscribeOn(scheduler).subscribe(log::info);
-        personToPushInCollection.log()
-                .subscribeOn(scheduler).subscribe(savedPersonList::add);
+        personToLog.log().subscribe(log::info);
+        personToPushInCollection.log().subscribe(savedPersonList::add);
 
 
         personFlux.connect();
